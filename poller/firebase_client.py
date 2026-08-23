@@ -15,7 +15,8 @@ def _load_credentials():
     # GitHub Actions supplies the whole service-account JSON as a secret value.
     raw_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
     if raw_json:
-        return credentials.Certificate(json.loads(raw_json))
+        # Strip a possible leading UTF-8 BOM (can sneak in via PowerShell/editor saves).
+        return credentials.Certificate(json.loads(raw_json.lstrip("﻿")))
 
     # Local dev instead points at the downloaded file sitting in the project root.
     file_name = os.environ.get("FIREBASE_SERVICE_ACCOUNT_FILE")
