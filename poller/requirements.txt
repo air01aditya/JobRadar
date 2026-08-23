@@ -1,0 +1,4 @@
+requests
+feedparser
+firebase-admin
+python-dotenv

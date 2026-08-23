@@ -1,0 +1,10 @@
+.env
+google-services.json
+*firebase-adminsdk*.json
+firebase-service-account.json
+*.pyc
+__pycache__/
+.gradle/
+build/
+.idea/
+local.properties
