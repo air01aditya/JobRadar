@@ -30,6 +30,7 @@ import com.jobradar.app.data.TrackedJobEntity
 import com.jobradar.app.data.TrackedStatus
 import com.jobradar.app.ui.theme.JobRadarAccent
 import com.jobradar.app.ui.theme.JobRadarMutedText
+import com.jobradar.app.util.formatSavedAt
 
 @Composable
 fun TrackerScreen(
@@ -91,6 +92,12 @@ private fun TrackedJobCard(job: TrackedJobEntity, onClick: () -> Unit) {
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 )
             }
+            Text(
+                text = "Saved ${formatSavedAt(job.createdAt)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = JobRadarMutedText,
+                modifier = Modifier.padding(top = 6.dp),
+            )
         }
     }
 }

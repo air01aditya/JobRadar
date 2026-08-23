@@ -34,7 +34,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.jobradar.app.data.TrackedStatus
 import com.jobradar.app.ui.theme.JobRadarError
+import com.jobradar.app.ui.theme.JobRadarMutedText
 import com.jobradar.app.util.formatDeadline
+import com.jobradar.app.util.formatSavedAt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,6 +64,12 @@ fun TrackerDetailScreen(
     ) {
         Text(text = job.title, style = MaterialTheme.typography.headlineSmall)
         Text(text = job.company, style = MaterialTheme.typography.bodyLarge)
+        Text(
+            text = "Saved ${formatSavedAt(job.createdAt)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = JobRadarMutedText,
+            modifier = Modifier.padding(top = 4.dp),
+        )
 
         Text(text = "Status", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 20.dp))
         Row(

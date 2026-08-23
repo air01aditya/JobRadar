@@ -16,6 +16,7 @@ private val LightColors = lightColorScheme(
 fun JobRadarTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = LightColors,
+        typography = JobRadarTypography,
         content = content,
     )
 }

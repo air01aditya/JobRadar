@@ -3,7 +3,7 @@ package com.jobradar.app.data.tracker
 import com.jobradar.app.data.TrackedJobDao
 import com.jobradar.app.data.TrackedJobEntity
 import com.jobradar.app.data.TrackedStatus
-import com.jobradar.app.data.firestore.JobPosting
+import com.jobradar.app.data.discovery.JobDiscoveryEntity
 import kotlinx.coroutines.flow.Flow
 import java.security.MessageDigest
 
@@ -11,7 +11,7 @@ class TrackerRepository(private val dao: TrackedJobDao) {
 
     fun observeTrackedJobs(): Flow<List<TrackedJobEntity>> = dao.observeAll()
 
-    suspend fun addFromFeed(job: JobPosting) {
+    suspend fun addFromFeed(job: JobDiscoveryEntity) {
         dao.upsert(
             TrackedJobEntity(
                 id = job.id,

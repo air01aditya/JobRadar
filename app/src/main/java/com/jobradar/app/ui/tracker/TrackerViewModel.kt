@@ -1,17 +1,22 @@
 package com.jobradar.app.ui.tracker
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.jobradar.app.data.TrackedJobEntity
 import com.jobradar.app.data.TrackedStatus
 import com.jobradar.app.data.tracker.TrackerRepository
+import com.jobradar.app.reminders.DeadlineReminderScheduler
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class TrackerViewModel(private val repository: TrackerRepository) : ViewModel() {
+class TrackerViewModel(
+    private val repository: TrackerRepository,
+    private val appContext: Context,
+) : ViewModel() {
 
     val trackedJobs: StateFlow<List<TrackedJobEntity>> = repository.observeTrackedJobs()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -29,16 +34,32 @@ class TrackerViewModel(private val repository: TrackerRepository) : ViewModel() 
     }
 
     fun updateDeadline(id: String, deadlineAt: Long?) {
-        viewModelScope.launch { repository.updateDeadline(id, deadlineAt) }
+        viewModelScope.launch {
+            repository.updateDeadline(id, deadlineAt)
+            if (deadlineAt == null) {
+                DeadlineReminderScheduler.cancel(appContext, id)
+            } else {
+                val job = trackedJobs.value.find { it.id == id } ?: repository.getById(id)
+                if (job != null) {
+                    DeadlineReminderScheduler.schedule(appContext, id, job.title, job.company, job.url, deadlineAt)
+                }
+            }
+        }
     }
 
     fun delete(job: TrackedJobEntity) {
-        viewModelScope.launch { repository.delete(job) }
+        viewModelScope.launch {
+            repository.delete(job)
+            DeadlineReminderScheduler.cancel(appContext, job.id)
+        }
     }
 
-    class Factory(private val repository: TrackerRepository) : ViewModelProvider.Factory {
+    class Factory(
+        private val repository: TrackerRepository,
+        private val appContext: Context,
+    ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            TrackerViewModel(repository) as T
+            TrackerViewModel(repository, appContext) as T
     }
 }

@@ -1,9 +1,15 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
-    id("com.google.gms.google-services")
+}
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
 }
 
 android {
@@ -18,6 +24,11 @@ android {
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Adzuna is a free-tier developer API key, not a user credential — kept out of
+        // source control via local.properties (gitignored) and injected at build time.
+        buildConfigField("String", "ADZUNA_APP_ID", "\"${localProperties.getProperty("adzuna.appId", "")}\"")
+        buildConfigField("String", "ADZUNA_APP_KEY", "\"${localProperties.getProperty("adzuna.appKey", "")}\"")
     }
 
     buildTypes {
@@ -37,6 +48,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -61,17 +73,17 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.navigation:navigation-compose:2.8.4")
 
-    // Shared discovery feed + push (Firestore also used for dedupe state/device token by the poller)
-    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
-    implementation("com.google.firebase:firebase-firestore-ktx")
-    implementation("com.google.firebase:firebase-messaging-ktx")
+    // On-device job discovery: HTTP client for the concurrent source/company-board calls
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // HTML parsing for the Telegram public-channel preview pages (no clean JSON API there)
+    implementation("org.jsoup:jsoup:1.17.2")
 
-    // Local tracker (status/notes/deadlines) — plain Room, no encryption needed here
+    // Local storage — discovered job feed AND tracker (status/notes/deadlines); plain Room, no encryption needed
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
-    // Deadline reminders
+    // Periodic background job-check (no server) + deadline reminders
     implementation("androidx.work:work-runtime-ktx:2.10.0")
 
     testImplementation("junit:junit:4.13.2")
