@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // The Feed screen reads new jobs; only the poller (Admin SDK, bypasses
+    // these rules entirely) is allowed to write them.
+    match /jobs/{jobId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Dedupe state is internal to the poller — no client access at all.
+    match /seenJobIds/{jobId} {
+      allow read, write: if false;
+    }
+
+    // The app writes its own FCM token here on launch; nothing reads it back
+    // client-side (only the poller's Admin SDK does, for sending pushes).
+    match /deviceTokens/{tokenId} {
+      allow read: if false;
+      allow write: if true;
+    }
+  }
+}
