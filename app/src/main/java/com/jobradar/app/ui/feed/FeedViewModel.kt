@@ -21,8 +21,6 @@ sealed interface FeedState {
     data class Loaded(val jobs: List<JobDiscoveryEntity>) : FeedState
 }
 
-enum class RefreshTarget { BOARDS, TELEGRAM }
-
 private const val REFRESH_COOLDOWN_SECONDS = 90
 
 class FeedViewModel(
@@ -33,15 +31,10 @@ class FeedViewModel(
     private val _state = MutableStateFlow<FeedState>(FeedState.Loading)
     val state: StateFlow<FeedState> = _state.asStateFlow()
 
-    private val _isRefreshingBoards = MutableStateFlow(false)
-    val isRefreshingBoards: StateFlow<Boolean> = _isRefreshingBoards.asStateFlow()
-    private val _cooldownBoards = MutableStateFlow(0)
-    val cooldownBoards: StateFlow<Int> = _cooldownBoards.asStateFlow()
-
-    private val _isRefreshingTelegram = MutableStateFlow(false)
-    val isRefreshingTelegram: StateFlow<Boolean> = _isRefreshingTelegram.asStateFlow()
-    private val _cooldownTelegram = MutableStateFlow(0)
-    val cooldownTelegram: StateFlow<Int> = _cooldownTelegram.asStateFlow()
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+    private val _cooldown = MutableStateFlow(0)
+    val cooldown: StateFlow<Int> = _cooldown.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -49,41 +42,19 @@ class FeedViewModel(
         }
     }
 
-    fun refresh(target: RefreshTarget) {
-        when (target) {
-            RefreshTarget.BOARDS -> refresh(
-                isRefreshing = _isRefreshingBoards,
-                cooldown = _cooldownBoards,
-                start = { JobCheckWorker.runBoardsNow(appContext) },
-                workName = JobCheckWorker.BOARDS_ONE_TIME_WORK_NAME,
-            )
-            RefreshTarget.TELEGRAM -> refresh(
-                isRefreshing = _isRefreshingTelegram,
-                cooldown = _cooldownTelegram,
-                start = { JobCheckWorker.runTelegramNow(appContext) },
-                workName = JobCheckWorker.TELEGRAM_ONE_TIME_WORK_NAME,
-            )
-        }
-    }
-
-    private fun refresh(
-        isRefreshing: MutableStateFlow<Boolean>,
-        cooldown: MutableStateFlow<Int>,
-        start: () -> Unit,
-        workName: String,
-    ) {
-        if (isRefreshing.value || cooldown.value > 0) return
-        isRefreshing.value = true
-        start()
+    fun refresh() {
+        if (_isRefreshing.value || _cooldown.value > 0) return
+        _isRefreshing.value = true
+        JobCheckWorker.runFeedNow(appContext)
         viewModelScope.launch {
             WorkManager.getInstance(appContext)
-                .getWorkInfosForUniqueWorkFlow(workName)
+                .getWorkInfosForUniqueWorkFlow(JobCheckWorker.FEED_ONE_TIME_WORK_NAME)
                 .first { infos -> infos.firstOrNull()?.state?.let(WorkInfo.State::isFinished) == true }
-            isRefreshing.value = false
-            cooldown.value = REFRESH_COOLDOWN_SECONDS
-            while (cooldown.value > 0) {
+            _isRefreshing.value = false
+            _cooldown.value = REFRESH_COOLDOWN_SECONDS
+            while (_cooldown.value > 0) {
                 delay(1_000)
-                cooldown.value -= 1
+                _cooldown.value -= 1
             }
         }
     }

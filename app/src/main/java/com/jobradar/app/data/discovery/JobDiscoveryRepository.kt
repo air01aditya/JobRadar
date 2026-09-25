@@ -6,16 +6,11 @@ import com.jobradar.app.data.discovery.sources.CompanyAtsSource
 import com.jobradar.app.data.discovery.sources.JobSource
 import com.jobradar.app.data.discovery.sources.RemoteOkSource
 import com.jobradar.app.data.discovery.sources.RemotiveSource
-import com.jobradar.app.data.discovery.sources.TelegramChannelSource
-import com.jobradar.app.data.discovery.sources.TelegramHealthMonitor
 import com.jobradar.app.data.discovery.sources.WeWorkRemotelySource
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import java.security.MessageDigest
-
-/** Which sources a check should run — lets each Feed tab refresh only what it actually shows. */
-enum class RefreshGroup { BOARDS, TELEGRAM, ALL }
 
 class JobDiscoveryRepository(private val dao: JobDiscoveryDao, private val appContext: Context) {
 
@@ -28,18 +23,17 @@ class JobDiscoveryRepository(private val dao: JobDiscoveryDao, private val appCo
     fun observeJobs(): Flow<List<JobDiscoveryEntity>> = dao.observeAll()
 
     /**
-     * Fetches the requested source [group] concurrently, filters, dedupes against storage,
-     * and returns what's newly inserted. [includeCompanyScan] adds the (much heavier)
-     * direct-company-board sweep — only pass true from the slower-cadence worker.
+     * Fetches the board sources concurrently, filters, dedupes against storage, and returns
+     * what's newly inserted. [includeCompanyScan] adds the (much heavier) direct-company-board
+     * sweep — only pass true from the slower-cadence worker.
      */
-    suspend fun runCheck(includeCompanyScan: Boolean, group: RefreshGroup = RefreshGroup.ALL): List<JobDiscoveryEntity> = coroutineScope {
+    suspend fun runCheck(includeCompanyScan: Boolean): List<JobDiscoveryEntity> = coroutineScope {
         val wasEmpty = dao.count() == 0
         val now = System.currentTimeMillis()
         dao.clampFuturePostedDates(now)
 
         val sources = buildList {
-            if (group == RefreshGroup.BOARDS || group == RefreshGroup.ALL) addAll(boardSources)
-            if (group == RefreshGroup.TELEGRAM || group == RefreshGroup.ALL) add(TelegramChannelSource)
+            addAll(boardSources)
             if (includeCompanyScan) add(companySource)
         }
 
@@ -54,10 +48,6 @@ class JobDiscoveryRepository(private val dao: JobDiscoveryDao, private val appCo
                 }
             }
             .map { it.await() }
-
-        fetchedPerSource.find { it.first == TelegramChannelSource.name }?.let { (_, jobs) ->
-            TelegramHealthMonitor.recordResult(appContext, jobs.size)
-        }
 
         val fetched = fetchedPerSource.flatMap { it.second }
 

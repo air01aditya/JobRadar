@@ -55,8 +55,7 @@ import com.jobradar.app.util.relativeTime
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
-private val TABS = listOf("India", "Remote", "Telegram")
-private const val TELEGRAM_SOURCE_PREFIX = "Telegram · "
+private val TABS = listOf("India", "Remote")
 private const val ACTIVE_FILTERS_LABEL = "Filtering: Analyst + Software/QA roles · Fresher (0-1 yr) · India & Remote"
 private val URGENT_COLOR = Color(0xFF2E9E5B)
 private val FRESH_COLOR = Color(0xFFC9A227)
@@ -97,13 +96,8 @@ fun FeedScreen(
 
         val current = state
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-            // Each tab refreshes only the sources it actually shows — India/Remote share
-            // the job-board group, Telegram has its own, so pulling one never waits on the other.
-            val target = if (page == 2) RefreshTarget.TELEGRAM else RefreshTarget.BOARDS
-            val isRefreshing by (if (target == RefreshTarget.TELEGRAM) viewModel.isRefreshingTelegram else viewModel.isRefreshingBoards)
-                .collectAsState()
-            val cooldownSeconds by (if (target == RefreshTarget.TELEGRAM) viewModel.cooldownTelegram else viewModel.cooldownBoards)
-                .collectAsState()
+            val isRefreshing by viewModel.isRefreshing.collectAsState()
+            val cooldownSeconds by viewModel.cooldown.collectAsState()
 
             Column(modifier = Modifier.fillMaxSize()) {
                 AnimatedVisibility(visible = cooldownSeconds > 0, enter = fadeIn(), exit = fadeOut()) {
@@ -123,7 +117,7 @@ fun FeedScreen(
 
                 PullToRefreshBox(
                     isRefreshing = isRefreshing,
-                    onRefresh = { viewModel.refresh(target) },
+                    onRefresh = { viewModel.refresh() },
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     when (current) {
@@ -131,13 +125,10 @@ fun FeedScreen(
                             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                         }
                         is FeedState.Loaded -> {
-                            // Telegram gets its own bucket entirely, regardless of remote/India —
-                            // it's not split by that axis, it's split by source.
-                            val (telegramJobs, otherJobs) = current.jobs.partition { it.source.startsWith(TELEGRAM_SOURCE_PREFIX) }
-                            val filtered = when (page) {
-                                0 -> otherJobs.filter { !it.isRemote }
-                                1 -> otherJobs.filter { it.isRemote }
-                                else -> telegramJobs
+                            val filtered = if (page == 0) {
+                                current.jobs.filter { !it.isRemote }
+                            } else {
+                                current.jobs.filter { it.isRemote }
                             }
                             if (filtered.isEmpty()) {
                                 Text(
