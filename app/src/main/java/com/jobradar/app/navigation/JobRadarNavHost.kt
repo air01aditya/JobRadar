@@ -49,7 +49,10 @@ import androidx.navigation.compose.rememberNavController
 import com.jobradar.app.data.TrackedStatus
 import com.jobradar.app.data.discovery.JobDiscoveryEntity
 import com.jobradar.app.data.discovery.JobDiscoveryRepository
+import com.jobradar.app.data.settings.FilterSettingsStore
 import com.jobradar.app.data.tracker.TrackerRepository
+import com.jobradar.app.ui.settings.SettingsScreen
+import com.jobradar.app.work.JobCheckWorker
 import com.jobradar.app.ui.feed.FeedScreen
 import com.jobradar.app.ui.feed.FeedViewModel
 import com.jobradar.app.ui.theme.JobRadarMutedText
@@ -64,6 +67,7 @@ private object Routes {
     const val TRACKER = "tracker"
     const val TRACKER_DETAIL = "tracker/{jobId}"
     const val ADD_MANUAL = "tracker_add"
+    const val SETTINGS = "settings"
 
     fun trackerDetail(jobId: String) = "tracker/$jobId"
 }
@@ -72,9 +76,11 @@ private object Routes {
 fun JobRadarNavHost(
     jobDiscoveryRepository: JobDiscoveryRepository,
     trackerRepository: TrackerRepository,
+    filterSettingsStore: FilterSettingsStore,
     navController: NavHostController = rememberNavController(),
 ) {
     val appContext = LocalContext.current.applicationContext
+    val filterSettings by filterSettingsStore.settings.collectAsState()
     val trackerViewModel: TrackerViewModel = viewModel(factory = TrackerViewModel.Factory(trackerRepository, appContext))
     val coroutineScope = rememberCoroutineScope()
     val currentDestination = navController.currentBackStackEntryAsState().value?.destination
@@ -128,6 +134,8 @@ fun JobRadarNavHost(
                     )
                     FeedScreen(
                         viewModel = feedViewModel,
+                        filterSettings = filterSettings,
+                        onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                         trackedJobIds = trackedJobIds,
                         onAddToTracker = { job ->
                             coroutineScope.launch { trackerRepository.addFromFeed(job) }
@@ -147,6 +155,19 @@ fun JobRadarNavHost(
                     TrackerDetailScreen(
                         viewModel = trackerViewModel,
                         jobId = jobId,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(Routes.SETTINGS) {
+                    SettingsScreen(
+                        initial = filterSettings,
+                        onSave = { updated ->
+                            val rolesChanged = updated.extraRoles != filterSettingsStore.current().extraRoles
+                            filterSettingsStore.update(updated)
+                            // New role titles only matter for jobs fetched from now on, so fetch now.
+                            if (rolesChanged) JobCheckWorker.runFeedNow(appContext)
+                            navController.popBackStack()
+                        },
                         onBack = { navController.popBackStack() },
                     )
                 }

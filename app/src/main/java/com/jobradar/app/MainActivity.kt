@@ -33,6 +33,7 @@ class MainActivity : ComponentActivity() {
                     JobRadarNavHost(
                         jobDiscoveryRepository = app.jobDiscoveryRepository,
                         trackerRepository = app.trackerRepository,
+                        filterSettingsStore = app.filterSettingsStore,
                     )
                 }
             }

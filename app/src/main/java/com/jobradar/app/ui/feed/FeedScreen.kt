@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -48,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.jobradar.app.data.discovery.FilterSettings
 import com.jobradar.app.data.discovery.JobDiscoveryEntity
 import com.jobradar.app.ui.theme.JobRadarAccent
 import com.jobradar.app.ui.theme.JobRadarMutedText
@@ -56,8 +58,16 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
 private val TABS = listOf("India", "Remote")
-private const val ACTIVE_FILTERS_LABEL =
-    "Showing only tech roles that say they're for freshers (0-1 yr) · India or India-friendly remote · last 14 days"
+
+private fun describeFilters(settings: FilterSettings): String {
+    val level = if (settings.requireEntryProof) "Entry-level tech roles" else "Tech roles"
+    val experience = if (settings.maxYears == 0) "no experience asked" else "up to ${settings.maxYears} yr experience"
+    val where = buildString {
+        append(if (settings.cities.isEmpty()) "India" else settings.cities.joinToString(", ") { it.replaceFirstChar(Char::uppercase) })
+        if (settings.showRemote) append(" + remote")
+    }
+    return "$level · $experience · $where · last ${settings.maxAgeDays} days"
+}
 private val URGENT_COLOR = Color(0xFF2E9E5B)
 private val FRESH_COLOR = Color(0xFFC9A227)
 
@@ -65,6 +75,8 @@ private val FRESH_COLOR = Color(0xFFC9A227)
 @Composable
 fun FeedScreen(
     viewModel: FeedViewModel,
+    filterSettings: FilterSettings,
+    onOpenSettings: () -> Unit,
     trackedJobIds: Set<String>,
     onAddToTracker: (JobDiscoveryEntity) -> Unit,
     onJobOpened: (JobDiscoveryEntity) -> Unit,
@@ -74,12 +86,20 @@ fun FeedScreen(
     val scope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Text(
-            text = ACTIVE_FILTERS_LABEL,
-            style = MaterialTheme.typography.labelSmall,
-            color = JobRadarMutedText,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+        ) {
+            Text(
+                text = describeFilters(filterSettings),
+                style = MaterialTheme.typography.labelSmall,
+                color = JobRadarMutedText,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = onOpenSettings) {
+                Icon(Icons.Default.Tune, contentDescription = "Job filters", tint = JobRadarAccent)
+            }
+        }
 
         TabRow(
             selectedTabIndex = pagerState.currentPage,

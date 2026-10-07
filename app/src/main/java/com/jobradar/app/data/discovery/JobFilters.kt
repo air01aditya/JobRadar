@@ -3,18 +3,22 @@ package com.jobradar.app.data.discovery
 import java.util.concurrent.TimeUnit
 
 /*
- * Every job must pass all five checks, in this order:
- *   1. role        — the TITLE is a tech role we want (developer / QA / analyst / support / devops)
- *   2. seniority   — nothing in the title or text says it needs 2+ years or a senior level
- *   3. entry proof — the title or text positively says it's for freshers / entry level
- *   4. location    — in India, or remote and open to India
- *   5. freshness   — posted within MAX_POSTING_AGE
- * Bump FILTERS_VERSION whenever these rules change: saved jobs are then re-checked with
- * [rejectedByTitle] (descriptions aren't stored, so only title-based rules can be re-applied).
+ * Filtering happens in two stages:
+ *
+ *   SAVE stage  — [acceptForStorage], fixed rules, run once when a job is fetched:
+ *     role (title is a tech role), not senior by title, India or India-friendly remote,
+ *     posted within MAX_STORED_AGE. Broad on purpose, so loosening a setting later has jobs to show.
+ *
+ *   SHOW stage  — [matchesPreferences], the user's FilterSettings, run every time the feed is drawn:
+ *     experience asked, entry-level proof, freshness window, remote on/off, cities, blocked words.
+ *     Changing a setting is instant because nothing has to be re-fetched.
+ *
+ * Bump FILTERS_VERSION when the SAVE rules change; saved jobs are then re-checked with [rejectedForStorage].
  */
-const val FILTERS_VERSION = 4
+const val FILTERS_VERSION = 5
 
-val MAX_POSTING_AGE_MILLIS = TimeUnit.DAYS.toMillis(14)
+/** The widest freshness window the user can pick; anything older is deleted. */
+val MAX_STORED_AGE_MILLIS = TimeUnit.DAYS.toMillis(FilterSettings.MAX_AGE_OPTIONS.max().toLong())
 
 // ---- 1. Role -------------------------------------------------------------------------------
 
@@ -53,9 +57,11 @@ private val ROLE_EXCLUDE_KEYWORDS = listOf(
 // A phone number in the title ("Fresher Developer 99.89.61.27.35") is a spam/agency listing, not a job.
 private val PHONE_NUMBER_IN_TITLE = Regex("\\d[\\d\\s.\\-]{7,}\\d")
 
-fun matchesRole(job: RawJob): Boolean {
+fun matchesRole(job: RawJob, extraRoles: List<String> = emptyList()): Boolean {
     val title = job.title.lowercase()
     if (PHONE_NUMBER_IN_TITLE.containsMatchIn(title)) return false
+    // A role the user added explicitly wins over the default exclusions ("salesforce marketing developer").
+    if (extraRoles.any { containsWord(title, it) }) return true
     if (ROLE_EXCLUDE_KEYWORDS.any { containsWord(title, it) }) return false
     return ROLE_KEYWORDS.any { containsWord(title, it) }
 }
@@ -86,8 +92,6 @@ private val EXPERIENCE_PATTERNS = listOf(
     Regex("(?:minimum|at least|min\\.?)\\s+(?:of\\s+)?$NUM\\s*\\+?\\s*$YEARS"),                  // minimum 3 years
 )
 
-private const val MAX_FRESHER_YEARS = 1
-
 // Bigger numbers are almost always the company bragging ("25+ years of industry experience"),
 // not a requirement — and genuinely senior roles are already caught by their titles.
 private const val MAX_PLAUSIBLE_REQUIREMENT_YEARS = 12
@@ -102,13 +106,18 @@ private fun experienceLowerBounds(text: String): List<Int> =
         .flatMap { pattern -> pattern.findAll(text).mapNotNull { it.groupValues[1].toIntOrNull() } }
         .filter { it <= MAX_PLAUSIBLE_REQUIREMENT_YEARS }
 
-fun isSenior(job: RawJob): Boolean {
+/** Senior by title alone — "Senior", "Lead", "Engineer II", "SDE 3". Not a user setting. */
+fun isSeniorTitle(job: RawJob): Boolean {
     val title = job.title.lowercase()
     if (SENIOR_TITLE_KEYWORDS.any { containsWord(title, it) }) return true
-    if (SENIOR_LEVEL_PATTERNS.any { it.containsMatchIn(title) }) return true
+    return SENIOR_LEVEL_PATTERNS.any { it.containsMatchIn(title) }
+}
+
+/** The posting asks for more than [maxYears] of experience, or says it's not for freshers. */
+fun asksTooMuchExperience(job: RawJob, maxYears: Int): Boolean {
     val text = searchableText(job)
-    if (NOT_FOR_FRESHERS.any { text.contains(it) }) return true
-    return experienceLowerBounds(text).any { it > MAX_FRESHER_YEARS }
+    if (maxYears <= 1 && NOT_FOR_FRESHERS.any { text.contains(it) }) return true
+    return experienceLowerBounds(text).any { it > maxYears }
 }
 
 // ---- 3. Entry-level proof -------------------------------------------------------------------
@@ -133,7 +142,7 @@ private val ENTRY_TEXT_KEYWORDS = listOf(
 
 private val BATCH_PATTERN = Regex("\\b20(2[3-7])\\s*(batch|pass\\s*-?outs?|graduates?)\\b")
 
-fun hasEntryLevelProof(job: RawJob): Boolean {
+fun hasEntryLevelProof(job: RawJob, maxYears: Int): Boolean {
     val title = job.title.lowercase()
     if (ENTRY_TITLE_KEYWORDS.any { containsWord(title, it) }) return true
     if (ENTRY_LEVEL_PATTERNS.any { it.containsMatchIn(title) }) return true
@@ -142,10 +151,8 @@ fun hasEntryLevelProof(job: RawJob): Boolean {
     if (ENTRY_TEXT_KEYWORDS.any { containsWord(text, it) }) return true
     if (BATCH_PATTERN.containsMatchIn(text)) return true
     val bounds = experienceLowerBounds(text)
-    return bounds.isNotEmpty() && bounds.all { it <= MAX_FRESHER_YEARS }
+    return bounds.isNotEmpty() && bounds.all { it <= maxYears }
 }
-
-fun matchesExperience(job: RawJob): Boolean = !isSenior(job) && hasEntryLevelProof(job)
 
 // ---- 4. Location ----------------------------------------------------------------------------
 
@@ -180,32 +187,61 @@ fun matchesLocation(job: RawJob): Boolean {
     return location.replace(REMOTE_FILLER, "").isBlank()
 }
 
-// ---- 5. Freshness ---------------------------------------------------------------------------
-
-fun matchesFreshness(job: RawJob, nowMillis: Long): Boolean {
-    val postedAt = job.postedAtEpochMillis ?: return true
-    return (nowMillis - postedAt) <= MAX_POSTING_AGE_MILLIS
+/** Empty [cities] means all of India. Remote jobs aren't tied to a city. */
+fun matchesCities(job: RawJob, cities: List<String>): Boolean {
+    if (cities.isEmpty() || job.isRemote) return true
+    val location = job.location.lowercase()
+    return cities.any { containsWord(location, it) }
 }
 
-// ---- All together ---------------------------------------------------------------------------
+// ---- 5. Freshness ---------------------------------------------------------------------------
 
-fun passesAllFilters(job: RawJob, nowMillis: Long): Boolean =
-    matchesRole(job) && matchesExperience(job) && matchesLocation(job) && matchesFreshness(job, nowMillis)
+fun matchesFreshness(job: RawJob, nowMillis: Long, maxAgeMillis: Long = daysToMillis(FilterSettings().maxAgeDays)): Boolean {
+    val postedAt = job.postedAtEpochMillis ?: return true
+    return (nowMillis - postedAt) <= maxAgeMillis
+}
 
-// For re-checking already-saved jobs, which have no description: only rules that can say "no".
-fun rejectedByTitle(job: RawJob): Boolean = !matchesRole(job) || isSenior(job) || !matchesLocation(job)
+// ---- The two stages -------------------------------------------------------------------------
+
+fun acceptForStorage(job: RawJob, nowMillis: Long, extraRoles: List<String> = emptyList()): Boolean =
+    matchesRole(job, extraRoles) && !isSeniorTitle(job) && matchesLocation(job) &&
+        matchesFreshness(job, nowMillis, MAX_STORED_AGE_MILLIS)
+
+fun matchesPreferences(job: RawJob, nowMillis: Long, settings: FilterSettings): Boolean {
+    val title = job.title.lowercase()
+    if (settings.blockedWords.any { containsWord(title, it) }) return false
+    if (!settings.showRemote && job.isRemote) return false
+    if (!matchesCities(job, settings.cities)) return false
+    if (!matchesFreshness(job, nowMillis, daysToMillis(settings.maxAgeDays))) return false
+    if (asksTooMuchExperience(job, settings.maxYears)) return false
+    return !settings.requireEntryProof || hasEntryLevelProof(job, settings.maxYears)
+}
+
+fun passesAllFilters(job: RawJob, nowMillis: Long, settings: FilterSettings = FilterSettings()): Boolean =
+    acceptForStorage(job, nowMillis, settings.extraRoles) && matchesPreferences(job, nowMillis, settings)
+
+/** Re-check for already-saved jobs when the SAVE rules change. */
+fun rejectedForStorage(job: RawJob, extraRoles: List<String>): Boolean =
+    !matchesRole(job, extraRoles) || isSeniorTitle(job) || !matchesLocation(job)
 
 // ---- Helpers --------------------------------------------------------------------------------
 
-private val HTML_TAG = Regex("<[^>]+>")
+private fun daysToMillis(days: Int) = TimeUnit.DAYS.toMillis(days.toLong())
 
-// Descriptions from RSS/Remotive arrive as HTML; strip tags so "<li>3+ years</li>" still reads as "3+ years".
-private fun searchableText(job: RawJob): String =
-    "${job.title} ${job.description}"
-        .replace(HTML_TAG, " ")
+private val HTML_TAG = Regex("<[^>]+>")
+private val WHITESPACE = Regex("\\s+")
+
+/** Descriptions from RSS/Remotive arrive as HTML; this turns "<li>3+ years</li>" into "3+ years". */
+fun plainText(html: String): String =
+    html.replace(HTML_TAG, " ")
         .replace("&nbsp;", " ")
         .replace("&amp;", "&")
-        .lowercase()
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace(WHITESPACE, " ")
+        .trim()
+
+private fun searchableText(job: RawJob): String = plainText("${job.title} ${job.description}").lowercase()
 
 // Whole-word match so "sr" doesn't fire inside "sre" and "hr" doesn't fire inside "three".
 private fun containsWord(text: String, keyword: String): Boolean {

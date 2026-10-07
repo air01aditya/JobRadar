@@ -112,7 +112,7 @@ class JobFiltersTest {
 
     @Test fun shortWordsNeedWholeWordMatches() {
         assertTrue(matchesRole(job("SRE Intern")))
-        assertFalse(isSenior(job("SRE Intern")))          // "sr" must not fire inside "sre"
+        assertFalse(isSeniorTitle(job("SRE Intern")))     // "sr" must not fire inside "sre"
         assertFalse(matchesRole(job("Internal Communications Intern")))
     }
 
@@ -124,6 +124,52 @@ class JobFiltersTest {
         listOf("Remote", "Worldwide", "Anywhere in the World", "Remote - India", "APAC", "")
             .forEach { assertTrue(it, matchesLocation(job("x", location = it, isRemote = true))) }
         assertFalse(matchesLocation(job("x", location = "London, UK")))
+    }
+
+    // ---- User settings ----
+
+    @Test fun turningOffEntryProofShowsPlainTitlesButStillRejectsExperience() {
+        val loose = FilterSettings(requireEntryProof = false)
+        assertTrue(passesAllFilters(job("Software Engineer"), now, loose))
+        assertFalse(passesAllFilters(job("Software Engineer", "3-5 years experience"), now, loose))
+        assertFalse(passesAllFilters(job("Senior Software Engineer"), now, loose))
+    }
+
+    @Test fun maxYearsSettingMovesTheExperienceLimit() {
+        val twoYears = FilterSettings(maxYears = 2)
+        assertTrue(passesAllFilters(job("Junior Developer", "2+ years of experience"), now, twoYears))
+        assertFalse(passesAllFilters(job("Junior Developer", "3+ years of experience"), now, twoYears))
+        assertFalse(passesAllFilters(job("Junior Developer", "1+ years of experience"), now, FilterSettings(maxYears = 0)))
+    }
+
+    @Test fun freshnessSettingNarrowsTheWindow() {
+        val fiveDaysOld = job("Junior Developer", postedAt = now - TimeUnit.DAYS.toMillis(5))
+        assertTrue(passesAllFilters(fiveDaysOld, now, FilterSettings(maxAgeDays = 7)))
+        assertFalse(passesAllFilters(fiveDaysOld, now, FilterSettings(maxAgeDays = 3)))
+    }
+
+    @Test fun citiesAndRemoteSettings() {
+        val pune = FilterSettings(cities = listOf("pune"))
+        assertTrue(passesAllFilters(job("Junior Developer", location = "Pune, Maharashtra"), now, pune))
+        assertFalse(passesAllFilters(job("Junior Developer", location = "Chennai"), now, pune))
+        assertTrue(passesAllFilters(job("Junior Developer", location = "Remote", isRemote = true), now, pune))
+        assertFalse(passesAllFilters(job("Junior Developer", location = "Remote", isRemote = true), now, FilterSettings(showRemote = false)))
+    }
+
+    @Test fun extraRolesAndBlockedWords() {
+        assertFalse(passesAllFilters(job("Junior Game Designer"), now))
+        assertTrue(passesAllFilters(job("Junior Game Designer"), now, FilterSettings(extraRoles = listOf("game designer"))))
+        assertFalse(passesAllFilters(job("Junior Developer - Night Shift"), now, FilterSettings(blockedWords = listOf("night shift"))))
+    }
+
+    @Test fun storageStageIsBroaderThanDefaultFeed() {
+        // Saved so that turning off "entry-level only" later has something to show.
+        assertTrue(acceptForStorage(job("Software Engineer"), now))
+        assertFalse(acceptForStorage(job("Software Engineer II"), now))
+    }
+
+    @Test fun parseWordListCleansInput() {
+        assertTrue(parseWordList(" Pune, bengaluru ,, PUNE\n") == listOf("pune", "bengaluru"))
     }
 
     @Test fun blankLocationOnlyTrustedForAdzuna() {

@@ -10,7 +10,8 @@ import kotlinx.coroutines.flow.Flow
 interface JobDiscoveryDao {
     // Sort by the job's real posted date when we know it (truest signal of "actually new"),
     // falling back to when we discovered it for sources that don't report one.
-    @Query("SELECT * FROM discovered_jobs ORDER BY COALESCE(postedAtEpochMillis, firstSeenAtEpochMillis) DESC LIMIT 300")
+    // Generous limit: the user's settings filter this list further before it's shown.
+    @Query("SELECT * FROM discovered_jobs ORDER BY COALESCE(postedAtEpochMillis, firstSeenAtEpochMillis) DESC LIMIT 1500")
     fun observeAll(): Flow<List<JobDiscoveryEntity>>
 
     @Query("SELECT COUNT(*) FROM discovered_jobs")
@@ -33,4 +34,8 @@ interface JobDiscoveryDao {
 
     @Query("DELETE FROM discovered_jobs WHERE id IN (:ids)")
     suspend fun deleteByIds(ids: List<String>)
+
+    // Rows saved before descriptions were stored get theirs the next time the job is fetched.
+    @Query("UPDATE discovered_jobs SET description = :description WHERE id = :id AND description = ''")
+    suspend fun fillMissingDescription(id: String, description: String)
 }

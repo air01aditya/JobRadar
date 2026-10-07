@@ -1,5 +1,6 @@
 package com.jobradar.app.data.discovery
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -14,4 +15,6 @@ data class JobDiscoveryEntity(
     val isRemote: Boolean,
     val postedAtEpochMillis: Long?,
     val firstSeenAtEpochMillis: Long,
+    // Plain text, kept so the user's experience/entry-level settings can be re-applied without refetching.
+    @ColumnInfo(defaultValue = "") val description: String = "",
 )
