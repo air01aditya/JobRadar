@@ -68,11 +68,19 @@ class JobFiltersTest {
         listOf(
             "Junior Web Developer (Fresher)", "AI & Automation Developer (Fresher)", "Junior Software Engineer",
             "Graduate Engineer Trainee", "Associate Software Engineer", "Associate Quality Assurance Engineer - Trainee",
-            "Trainee Solutions Engineer", "Junior Data Analyst", "Software Engineer I", "SDE 1", "SDE-I",
+            "Junior Data Analyst", "Software Engineer I", "SDE 1", "SDE-I",
             "Android Developer Intern", "Flutter Developer - Fresher", "DevOps Engineer Trainee",
             "Technical Support Engineer - Freshers", "SOC Analyst L1", "Java Developer Trainee",
-            "Tehnical Trainee for NetSuite, Zoho, Odoo",
+            "SAP ABAP Developer - Fresher", "Software Testing Intern",
         ).forEach { assertTrue(it, passesAllFilters(job(it), now)) }
+    }
+
+    @Test fun rejectsNicheFunctionalTraineeRoles() {
+        listOf(
+            "Tehnical Trainee for NetSuite, Zoho, Odoo", "Functional Trainee- NetSuite , Odoo",
+            "Trainee Solutions Engineer", "IN-Associate_SAP ABAP_Enterprise Apps SAP_Advisory_Pune",
+            "Business Development Intern", "UI/UX Designer (Fresher)", "Product Intern",
+        ).forEach { assertFalse(it, passesAllFilters(job(it), now)) }
     }
 
     @Test fun acceptsPlainTitleWhenDescriptionSaysEntryLevel() {
@@ -104,6 +112,13 @@ class JobFiltersTest {
             "Diploma Engineer Trainee",
             "Graduate Engineer Trainee (GET) – Design Engineering",
         ).forEach { assertFalse(it, passesAllFilters(job(it), now)) }
+    }
+
+    @Test fun rejectsPayToWorkAndUrlCompanies() {
+        assertFalse(passesAllFilters(job("Fresher Software Developer Charges involved in Hyderabad"), now))
+        val urlCompany = job("Junior Software Engineer - Fresher").copy(company = "httpswwwicloudemscomvlog")
+        assertFalse(passesAllFilters(urlCompany, now))
+        assertTrue(passesAllFilters(job("SDE Intern").copy(company = "Amazon.com Services LLC"), now))
     }
 
     @Test fun onJobTrainingIsNotACourse() {

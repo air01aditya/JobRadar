@@ -25,6 +25,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +51,7 @@ import com.jobradar.app.data.TrackedStatus
 import com.jobradar.app.data.discovery.JobDiscoveryEntity
 import com.jobradar.app.data.discovery.JobDiscoveryRepository
 import com.jobradar.app.data.settings.FilterSettingsStore
+import com.jobradar.app.data.tracker.SharedJob
 import com.jobradar.app.data.tracker.TrackerRepository
 import com.jobradar.app.ui.settings.SettingsScreen
 import com.jobradar.app.work.JobCheckWorker
@@ -68,6 +70,7 @@ private object Routes {
     const val TRACKER_DETAIL = "tracker/{jobId}"
     const val ADD_MANUAL = "tracker_add"
     const val SETTINGS = "settings"
+    const val SHARED_JOB = "tracker_shared"
 
     fun trackerDetail(jobId: String) = "tracker/$jobId"
 }
@@ -77,10 +80,16 @@ fun JobRadarNavHost(
     jobDiscoveryRepository: JobDiscoveryRepository,
     trackerRepository: TrackerRepository,
     filterSettingsStore: FilterSettingsStore,
+    sharedJob: SharedJob? = null,
+    onSharedJobSaved: () -> Unit = {},
     navController: NavHostController = rememberNavController(),
 ) {
     val appContext = LocalContext.current.applicationContext
     val filterSettings by filterSettingsStore.settings.collectAsState()
+
+    LaunchedEffect(sharedJob) {
+        if (sharedJob != null) navController.navigate(Routes.SHARED_JOB)
+    }
     val trackerViewModel: TrackerViewModel = viewModel(factory = TrackerViewModel.Factory(trackerRepository, appContext))
     val coroutineScope = rememberCoroutineScope()
     val currentDestination = navController.currentBackStackEntryAsState().value?.destination
@@ -169,6 +178,13 @@ fun JobRadarNavHost(
                             navController.popBackStack()
                         },
                         onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(Routes.SHARED_JOB) {
+                    AddManualJobScreen(
+                        viewModel = trackerViewModel,
+                        shared = sharedJob,
+                        onDone = onSharedJobSaved,
                     )
                 }
                 composable(Routes.ADD_MANUAL) {

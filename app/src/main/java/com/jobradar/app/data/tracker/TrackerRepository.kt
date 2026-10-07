@@ -12,30 +12,20 @@ class TrackerRepository(private val dao: TrackedJobDao) {
     fun observeTrackedJobs(): Flow<List<TrackedJobEntity>> = dao.observeAll()
 
     suspend fun addFromFeed(job: JobDiscoveryEntity) {
-        dao.upsert(
-            TrackedJobEntity(
-                id = job.id,
-                title = job.title,
-                company = job.company,
-                url = job.url,
-                status = TrackedStatus.SAVED.name,
-                createdAt = System.currentTimeMillis(),
-            )
-        )
+        addIfAbsent(TrackedJobEntity(job.id, job.title, job.company, job.url, TrackedStatus.SAVED.name, createdAt = now()))
     }
 
-    suspend fun addManual(title: String, company: String, url: String) {
-        dao.upsert(
-            TrackedJobEntity(
-                id = manualJobId(url),
-                title = title,
-                company = company,
-                url = url,
-                status = TrackedStatus.SAVED.name,
-                createdAt = System.currentTimeMillis(),
-            )
-        )
+    suspend fun addManual(title: String, company: String, url: String, notes: String = "") {
+        addIfAbsent(TrackedJobEntity(manualJobId(url), title, company, url, TrackedStatus.SAVED.name, notes, createdAt = now()))
     }
+
+    // Re-adding a job (shared twice, or "Yes, track it" on one already tracked) must not reset
+    // its status, notes or deadline back to a fresh "Saved".
+    private suspend fun addIfAbsent(job: TrackedJobEntity) {
+        if (dao.getById(job.id) == null) dao.upsert(job)
+    }
+
+    private fun now() = System.currentTimeMillis()
 
     suspend fun updateStatus(id: String, status: TrackedStatus) = dao.updateStatus(id, status.name)
 

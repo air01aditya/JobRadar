@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
  *
  * Bump FILTERS_VERSION when the SAVE rules change; saved jobs are then re-checked with [rejectedForStorage].
  */
-const val FILTERS_VERSION = 5
+const val FILTERS_VERSION = 7
 
 /** The widest freshness window the user can pick; anything older is deleted. */
 val MAX_STORED_AGE_MILLIS = TimeUnit.DAYS.toMillis(FilterSettings.MAX_AGE_OPTIONS.max().toLong())
@@ -31,9 +31,9 @@ private val ROLE_KEYWORDS = listOf(
     "qa", "quality assurance", "test engineer", "tester", "testing", "test analyst", "automation engineer",
     "devops", "cloud engineer", "site reliability", "sre", "platform engineer",
     "support engineer", "technical support", "application support", "production support",
-    "it support", "desktop support", "it trainee", "technical trainee", "it analyst", "it engineer",
-    "implementation engineer", "solutions engineer", "solution engineer",
-    "salesforce", "servicenow", "sap", "erp", "netsuite", "odoo",
+    // No bare "sap"/"salesforce"/"erp"/"netsuite": they pulled in functional/consulting trainee roles.
+    // "SAP ABAP Developer" and "Salesforce Developer" still match through "developer".
+    "it support", "desktop support", "it analyst", "it engineer",
     "data analyst", "business analyst", "systems analyst", "system analyst", "product analyst",
     "mis analyst", "reporting analyst", "bi analyst", "power bi",
     "soc analyst", "security analyst", "cyber security", "cybersecurity",
@@ -50,16 +50,21 @@ private val ROLE_EXCLUDE_KEYWORDS = listOf(
     // Paid courses dressed up as fresher jobs — a common trap for freshers in India.
     // (Not plain "training" — real jobs say "on-job training".)
     "freshers training", "training program", "training programme", "training course", "paid training",
-    "course", "certification", "simulated", "placement",
+    "course", "certification", "simulated", "placement", "charges", "charges involved", "fee", "fees",
     "data scientist", "machine learning", "ml engineer", "data engineer",
 )
 
 // A phone number in the title ("Fresher Developer 99.89.61.27.35") is a spam/agency listing, not a job.
 private val PHONE_NUMBER_IN_TITLE = Regex("\\d[\\d\\s.\\-]{7,}\\d")
 
+// Real employers don't have a web address as their name ("httpswwwicloudemscomvlog").
+// (Not ".com" — "Amazon.com Services" is a real employer name.)
+private val URL_AS_COMPANY = Regex("^https?|www")
+
 fun matchesRole(job: RawJob, extraRoles: List<String> = emptyList()): Boolean {
     val title = job.title.lowercase()
     if (PHONE_NUMBER_IN_TITLE.containsMatchIn(title)) return false
+    if (URL_AS_COMPANY.containsMatchIn(job.company.lowercase())) return false
     // A role the user added explicitly wins over the default exclusions ("salesforce marketing developer").
     if (extraRoles.any { containsWord(title, it) }) return true
     if (ROLE_EXCLUDE_KEYWORDS.any { containsWord(title, it) }) return false

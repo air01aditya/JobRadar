@@ -21,8 +21,12 @@ class TrackerViewModel(
     val trackedJobs: StateFlow<List<TrackedJobEntity>> = repository.observeTrackedJobs()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun addManual(title: String, company: String, url: String) {
-        viewModelScope.launch { repository.addManual(title, company, url) }
+    /** [onSaved] runs only once the row is written — closing the screen earlier would cancel the save. */
+    fun addManual(title: String, company: String, url: String, notes: String = "", onSaved: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.addManual(title, company, url, notes)
+            onSaved()
+        }
     }
 
     fun updateStatus(id: String, status: TrackedStatus) {

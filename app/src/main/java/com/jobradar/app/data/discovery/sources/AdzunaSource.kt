@@ -16,27 +16,26 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
- * Adzuna's India endpoint, searched by job TITLE for fresher-style words — "Junior Web Developer
- * (Fresher)", "Graduate Engineer Trainee" — instead of skimming the newest IT jobs, which are
- * mostly experienced roles.
+ * Adzuna's India endpoint, searched ROLE-first: the title must name a mainstream role
+ * ("developer", "software engineer") and the posting must mention a fresher word somewhere.
+ * Searching fresher words alone ("trainee", "associate") pulled in niche ERP/consulting roles.
  *
- * Free tier limits: 250 requests/day, 1000/week, 2500/month. QUERIES.size requests per run,
+ * Free tier limits: 250 requests/day, 1000/week, 2500/month. queries.size requests per run,
  * at most once per MIN_INTERVAL, keeps us at ~72/day (~2200/month) whatever triggers the run.
  */
 class AdzunaSource(private val context: Context) : JobSource {
     override val name = NAME
 
-    private data class Query(val titleWord: String, val itOnly: Boolean)
+    // [titleWords]: all must appear in the title. [anyWords]: at least one must appear anywhere.
+    private data class Query(val titleWords: String, val itOnly: Boolean, val anyWords: String? = FRESHER_WORDS)
 
-    // Broad words ("intern", "associate") are limited to the IT category; the rest are rare
-    // enough in titles that searching every category finds more fresher tech roles than it loses.
     private val queries = listOf(
-        Query("fresher", itOnly = false),
-        Query("trainee", itOnly = false),
-        Query("junior", itOnly = false),
-        Query("graduate", itOnly = false),
-        Query("intern", itOnly = true),
-        Query("associate", itOnly = true),
+        Query("developer", itOnly = false),
+        Query("software engineer", itOnly = false),
+        Query("analyst", itOnly = true),
+        Query("test", itOnly = false),
+        Query("fresher", itOnly = true, anyWords = null),
+        Query("intern", itOnly = true, anyWords = null),
     )
 
     override suspend fun fetch(): List<RawJob> = coroutineScope {
@@ -67,17 +66,20 @@ class AdzunaSource(private val context: Context) : JobSource {
             .addQueryParameter("app_id", appId)
             .addQueryParameter("app_key", appKey)
             .addQueryParameter("results_per_page", "50")
-            .addQueryParameter("title_only", query.titleWord)
+            .addQueryParameter("title_only", query.titleWords)
             .addQueryParameter("max_days_old", "14")
             .addQueryParameter("sort_by", "date")
             .addQueryParameter("content-type", "application/json")
-            .apply { if (query.itOnly) addQueryParameter("category", "it-jobs") }
+            .apply {
+                if (query.itOnly) addQueryParameter("category", "it-jobs")
+                query.anyWords?.let { addQueryParameter("what_or", it) }
+            }
             .build()
 
         val request = Request.Builder().url(url).header("User-Agent", JobHttpClient.USER_AGENT).build()
         JobHttpClient.client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                android.util.Log.w("JobDiscovery", "adzuna '${query.titleWord}' HTTP ${response.code}")
+                android.util.Log.w("JobDiscovery", "adzuna '${query.titleWords}' HTTP ${response.code}")
                 return emptyList()
             }
             val body = response.body?.string() ?: return emptyList()
@@ -106,6 +108,7 @@ class AdzunaSource(private val context: Context) : JobSource {
 
     companion object {
         const val NAME = "adzuna"
+        private const val FRESHER_WORDS = "fresher freshers graduate graduates trainee junior entry intern internship"
         private const val BASE_URL = "https://api.adzuna.com/v1/api/jobs/in/search/1"
         private const val PREFS = "adzuna_budget"
         private const val KEY_LAST_RUN = "last_run_millis"

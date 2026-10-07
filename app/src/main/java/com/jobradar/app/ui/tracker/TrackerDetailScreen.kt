@@ -4,6 +4,8 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -38,7 +40,7 @@ import com.jobradar.app.ui.theme.JobRadarMutedText
 import com.jobradar.app.util.formatDeadline
 import com.jobradar.app.util.formatSavedAt
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TrackerDetailScreen(
     viewModel: TrackerViewModel,
@@ -72,7 +74,8 @@ fun TrackerDetailScreen(
         )
 
         Text(text = "Status", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 20.dp))
-        Row(
+        // Wraps to a second line: five chips don't fit one phone-width row ("Rejected" was cut off).
+        FlowRow(
             modifier = Modifier.padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
