@@ -29,6 +29,7 @@ class JobFiltersTest {
             "Software Engr II", "QA Engineer 2 -Mobile Apps", "Data Analyst II", "Business Analyst II",
             "Advanced Software Engineer", "Business Analyst Experienced", "Lead Developer",
             "Staff Software Development Engineer (Backend - Python/Go/Rust)",
+            "Dir, Software Engrg Mgmt", "Software Engineering PMTS", "Software Procurement Intern",
         ).forEach { assertFalse(it, passesAllFilters(job(it), now)) }
     }
 
@@ -72,6 +73,7 @@ class JobFiltersTest {
             "Android Developer Intern", "Flutter Developer - Fresher", "DevOps Engineer Trainee",
             "Technical Support Engineer - Freshers", "SOC Analyst L1", "Java Developer Trainee",
             "SAP ABAP Developer - Fresher", "Software Testing Intern",
+            "Developer (Vapasi) - Intern", "Associate Technical Support Engineer",
         ).forEach { assertTrue(it, passesAllFilters(job(it), now)) }
     }
 

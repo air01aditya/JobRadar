@@ -31,6 +31,22 @@ fun parseIsoDateMillis(value: String?): Long? {
     }
 }
 
+private val WORKDAY_DAYS_AGO = Regex("(\\d+)\\+?\\s+days?\\s+ago", RegexOption.IGNORE_CASE)
+
+/**
+ * Workday only gives relative text: "Posted Today", "Posted Yesterday", "Posted 3 Days Ago",
+ * "Posted 30+ Days Ago". "30+" becomes 31 days so the freshness filter treats it as old.
+ */
+fun parseWorkdayPostedOn(value: String?, nowMillis: Long): Long? {
+    val text = value?.lowercase() ?: return null
+    val days = when {
+        "today" in text -> 0L
+        "yesterday" in text -> 1L
+        else -> WORKDAY_DAYS_AGO.find(text)?.groupValues?.get(1)?.toLongOrNull()?.let { if ("+" in text) it + 1 else it }
+    } ?: return null
+    return nowMillis - java.util.concurrent.TimeUnit.DAYS.toMillis(days)
+}
+
 /** RFC-822 style dates, as used in RSS <pubDate> elements. */
 fun parseRfc822DateMillis(value: String?): Long? {
     if (value.isNullOrBlank()) return null

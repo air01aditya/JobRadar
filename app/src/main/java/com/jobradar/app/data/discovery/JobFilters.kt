@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
  *
  * Bump FILTERS_VERSION when the SAVE rules change; saved jobs are then re-checked with [rejectedForStorage].
  */
-const val FILTERS_VERSION = 7
+const val FILTERS_VERSION = 8
 
 /** The widest freshness window the user can pick; anything older is deleted. */
 val MAX_STORED_AGE_MILLIS = TimeUnit.DAYS.toMillis(FilterSettings.MAX_AGE_OPTIONS.max().toLong())
@@ -46,7 +46,7 @@ private val ROLE_EXCLUDE_KEYWORDS = listOf(
     "human resource", "accountant", "finance", "content writer", "copywriter", "graphic design",
     "teacher", "tutor", "trainer", "faculty", "instructor",
     "mechanical", "civil", "electrical", "chemical", "automobile", "marine", "manufacturing",
-    "design", "diploma", "production engineer",
+    "design", "diploma", "production engineer", "procurement",
     // Paid courses dressed up as fresher jobs — a common trap for freshers in India.
     // (Not plain "training" — real jobs say "on-job training".)
     "freshers training", "training program", "training programme", "training course", "paid training",
@@ -76,6 +76,7 @@ fun matchesRole(job: RawJob, extraRoles: List<String> = emptyList()): Boolean {
 private val SENIOR_TITLE_KEYWORDS = listOf(
     "senior", "sr", "staff", "principal", "lead", "director", "head of", "manager", "architect",
     "vp", "vice president", "experienced", "advanced", "mid level", "mid-level", "expert",
+    "dir", "mgmt", "smts", "lmts", "pmts",   // "Dir, Software Engrg Mgmt"; Salesforce senior/lead/principal levels
 )
 
 // "Software Engineer II", "Engr III", "SDE 2", "QA Engineer 2", "Level 4", "L5".

@@ -4,7 +4,9 @@ import android.content.Context
 import android.util.Log
 import com.jobradar.app.data.discovery.sources.AdzunaSource
 import com.jobradar.app.data.discovery.sources.CompanyAtsSource
+import com.jobradar.app.data.discovery.sources.CompanyDataset
 import com.jobradar.app.data.discovery.sources.JobSource
+import com.jobradar.app.data.discovery.sources.PriorityEmployers
 import com.jobradar.app.data.discovery.sources.RemoteOkSource
 import com.jobradar.app.data.discovery.sources.RemotiveSource
 import com.jobradar.app.data.discovery.sources.WeWorkRemotelySource
@@ -25,12 +27,19 @@ class JobDiscoveryRepository(
     private val settingsStore: FilterSettingsStore,
 ) {
 
-    // Fast job-board aggregators — cheap, shown on the India/Remote tabs.
-    private val boardSources: List<JobSource> =
-        listOf(AdzunaSource(appContext), RemotiveSource, RemoteOkSource, WeWorkRemotelySource)
+    // Every 15 minutes: aggregators, plus the hand-checked big recruiters (~33 requests) so
+    // their new openings appear before aggregators re-list them.
+    private val boardSources: List<JobSource> = listOf(
+        AdzunaSource(appContext), RemotiveSource, RemoteOkSource, WeWorkRemotelySource,
+        CompanyAtsSource(appContext, "priority-employers") { PriorityEmployers.boards },
+    )
 
-    // Direct company career-page scan — hundreds of requests, run on a slower cadence.
-    private val companySource: JobSource by lazy { CompanyAtsSource(appContext) }
+    // Hourly: the broad ~800-company dataset (hundreds of requests), minus the priority list.
+    private val companySource: JobSource by lazy {
+        CompanyAtsSource(appContext, "company-ats") { context ->
+            CompanyDataset.loadIndiaCompanies(context).filterNot(PriorityEmployers::covers)
+        }
+    }
 
     // Periodic runs and pull-to-refresh can start at the same moment. Without this, both read
     // "which ids exist" before either writes, both decide the same job is new, and both notify.

@@ -4,6 +4,7 @@ import android.content.Context
 import com.jobradar.app.data.discovery.JobHttpClient
 import com.jobradar.app.data.discovery.RawJob
 import com.jobradar.app.data.discovery.parseIsoDateMillis
+import com.jobradar.app.data.discovery.parseWorkdayPostedOn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -18,14 +19,17 @@ import org.json.JSONObject
 /**
  * Watches company career pages directly via their public ATS APIs — as fast as the
  * recruiter clicking publish, instead of waiting on aggregator re-indexing lag.
- * Company universe comes from [CompanyDataset] (India-tagged companies only).
+ * Used twice: the hand-checked [PriorityEmployers] (every 15 min) and the broad
+ * [CompanyDataset] (hourly).
  */
-class CompanyAtsSource(private val context: Context) : JobSource {
-    override val name = "company-ats"
+class CompanyAtsSource(
+    private val context: Context,
+    override val name: String,
+    private val loadBoards: suspend (Context) -> List<CompanyBoard>,
+) : JobSource {
 
     override suspend fun fetch(): List<RawJob> = coroutineScope {
-        val companies = CompanyDataset.loadIndiaCompanies(context)
-        companies
+        loadBoards(context)
             .map { company -> async { runCatching { fetchBoard(company) }.getOrElse { emptyList() } } }
             .awaitAll()
             .flatten()
@@ -147,7 +151,9 @@ class CompanyAtsSource(private val context: Context) : JobSource {
     }
 
     private fun fetchSmartRecruiters(company: CompanyBoard): List<RawJob> {
-        val body = get("https://api.smartrecruiters.com/v1/companies/${company.slug}/postings") ?: return emptyList()
+        // Without these the API returns its default 10 postings worldwide — Bosch has 500+ in India.
+        val body = get("https://api.smartrecruiters.com/v1/companies/${company.slug}/postings?country=in&limit=100")
+            ?: return emptyList()
         val jobs = JSONObject(body).optJSONArray("content") ?: return emptyList()
         return (0 until jobs.length()).map { i ->
             val item = jobs.getJSONObject(i)
@@ -240,19 +246,33 @@ class CompanyAtsSource(private val context: Context) : JobSource {
     }
 
     // Workday's slug is packed as "tenant|wdInstance|siteName" (see CompanyDataset.extractWorkdaySlug).
+    // Without an India filter, a global company's newest 20 jobs are mostly outside India.
     private fun fetchWorkday(company: CompanyBoard): List<RawJob> {
         val parts = company.slug.split("|")
         if (parts.size != 3) return emptyList()
         val (tenant, wdInstance, site) = parts
         val base = "https://$tenant.$wdInstance.myworkdayjobs.com"
-        val body = postJson(
-            "$base/wday/cxs/$tenant/$site/jobs",
-            """{"appliedFacets":{},"limit":20,"offset":0,"searchText":""}""",
-        ) ?: return emptyList()
+        val endpoint = "$base/wday/cxs/$tenant/$site/jobs"
+        val indiaFacet = workdayIndiaFacet(endpoint, "$tenant|$site")
+
+        val request = JSONObject()
+            .put("appliedFacets", JSONObject().apply { indiaFacet?.let { put(it.first, JSONArray().put(it.second)) } })
+            .put("limit", 20)
+            .put("offset", 0)
+            // Sites with no country filter still narrow well on a text search for "India".
+            .put("searchText", if (indiaFacet == null) "India" else "")
+        val body = postJson(endpoint, request.toString()) ?: return emptyList()
         val jobs = JSONObject(body).optJSONArray("jobPostings") ?: return emptyList()
+        val now = System.currentTimeMillis()
         return (0 until jobs.length()).map { i ->
             val item = jobs.getJSONObject(i)
-            val location = item.optString("locationsText")
+            val rawLocation = item.optString("locationsText")
+            // "2 Locations" says nothing about the country, but the India filter already guaranteed it.
+            val location = if (indiaFacet != null && !rawLocation.contains("india", ignoreCase = true)) {
+                "$rawLocation, India"
+            } else {
+                rawLocation
+            }
             val externalPath = item.optString("externalPath")
             RawJob(
                 source = company.companyName,
@@ -262,9 +282,51 @@ class CompanyAtsSource(private val context: Context) : JobSource {
                 location = location,
                 url = "$base/$site$externalPath",
                 description = "",
-                isRemote = location.contains("remote", ignoreCase = true),
-                postedAtEpochMillis = null, // Workday reports relative text ("Posted Today"), not a real timestamp
+                isRemote = rawLocation.contains("remote", ignoreCase = true),
+                postedAtEpochMillis = parseWorkdayPostedOn(item.optString("postedOn"), now),
             )
         }
+    }
+
+    /**
+     * Each Workday site names its country filter differently ("locationCountry", "Location_Country",
+     * "locationHierarchy1", ...), so ask the site once which filter has an "India" option and cache
+     * the answer for a week. Returns (filterName, optionId), or null if the site has no such filter.
+     */
+    private fun workdayIndiaFacet(endpoint: String, cacheKey: String): Pair<String, String>? {
+        val prefs = context.getSharedPreferences(WORKDAY_FACET_PREFS, Context.MODE_PRIVATE)
+        val cached = prefs.getString(cacheKey, null)?.split("|")
+        val now = System.currentTimeMillis()
+        if (cached != null && cached.size == 3 && now - (cached[2].toLongOrNull() ?: 0) < WORKDAY_FACET_TTL) {
+            return if (cached[0].isEmpty()) null else cached[0] to cached[1]
+        }
+
+        val body = postJson(endpoint, """{"appliedFacets":{},"limit":1,"offset":0,"searchText":""}""") ?: return null
+        val facet = runCatching { findIndiaFacet(JSONObject(body).optJSONArray("facets"), parentParameter = null) }.getOrNull()
+        prefs.edit().putString(cacheKey, "${facet?.first.orEmpty()}|${facet?.second.orEmpty()}|$now").apply()
+        return facet
+    }
+
+    // Facets can nest: a "Locations" group whose values are themselves facets with their own options.
+    private fun findIndiaFacet(facets: JSONArray?, parentParameter: String?): Pair<String, String>? {
+        if (facets == null) return null
+        for (i in 0 until facets.length()) {
+            val facet = facets.optJSONObject(i) ?: continue
+            val parameter = facet.optString("facetParameter").ifBlank { parentParameter } ?: continue
+            val values = facet.optJSONArray("values") ?: continue
+            for (j in 0 until values.length()) {
+                val value = values.optJSONObject(j) ?: continue
+                if (value.optString("descriptor").trim().equals("India", ignoreCase = true) && value.optString("id").isNotBlank()) {
+                    return parameter to value.optString("id")
+                }
+                if (value.has("values")) findIndiaFacet(JSONArray().put(value), parameter)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private companion object {
+        const val WORKDAY_FACET_PREFS = "workday_india_facets"
+        val WORKDAY_FACET_TTL = java.util.concurrent.TimeUnit.DAYS.toMillis(7)
     }
 }
