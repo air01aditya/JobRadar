@@ -56,7 +56,8 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
 private val TABS = listOf("India", "Remote")
-private const val ACTIVE_FILTERS_LABEL = "Filtering: Analyst + Software/QA roles · Fresher (0-1 yr) · India & Remote"
+private const val ACTIVE_FILTERS_LABEL =
+    "Showing only tech roles that say they're for freshers (0-1 yr) · India or India-friendly remote · last 14 days"
 private val URGENT_COLOR = Color(0xFF2E9E5B)
 private val FRESH_COLOR = Color(0xFFC9A227)
 
@@ -131,11 +132,18 @@ fun FeedScreen(
                                 current.jobs.filter { it.isRemote }
                             }
                             if (filtered.isEmpty()) {
-                                Text(
-                                    text = "No matching jobs yet — pull down to check now.",
-                                    color = JobRadarMutedText,
-                                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
-                                )
+                                // Pull-to-refresh only reacts to scrollable content — a bare Text can't be pulled.
+                                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                                    item {
+                                        Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = "No matching jobs yet — pull down to check now.",
+                                                color = JobRadarMutedText,
+                                                modifier = Modifier.padding(24.dp),
+                                            )
+                                        }
+                                    }
+                                }
                             } else {
                                 JobList(
                                     jobs = filtered,

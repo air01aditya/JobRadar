@@ -37,6 +37,9 @@ class FeedViewModel(
     val cooldown: StateFlow<Int> = _cooldown.asStateFlow()
 
     init {
+        // The background check may not have run for hours (phone asleep), so clear out
+        // expired jobs on open — the feed should never show something past the freshness window.
+        viewModelScope.launch { repository.cleanUp() }
         viewModelScope.launch {
             repository.observeJobs().collect { jobs -> _state.value = FeedState.Loaded(jobs) }
         }

@@ -54,6 +54,7 @@ object WeWorkRemotelySource : JobSource {
         var description = StringBuilder()
         var pubDate = StringBuilder()
         var guid = StringBuilder()
+        var region = StringBuilder()
 
         while (eventType != XmlPullParser.END_DOCUMENT) {
             when (eventType) {
@@ -62,7 +63,7 @@ object WeWorkRemotelySource : JobSource {
                     if (currentTag == "item") {
                         inItem = true
                         title = StringBuilder(); link = StringBuilder(); description = StringBuilder()
-                        pubDate = StringBuilder(); guid = StringBuilder()
+                        pubDate = StringBuilder(); guid = StringBuilder(); region = StringBuilder()
                     }
                 }
                 XmlPullParser.TEXT -> {
@@ -74,6 +75,7 @@ object WeWorkRemotelySource : JobSource {
                             "description" -> description.append(text)
                             "pubDate" -> pubDate.append(text)
                             "guid" -> guid.append(text)
+                            "region" -> region.append(text)
                         }
                     }
                 }
@@ -92,7 +94,8 @@ object WeWorkRemotelySource : JobSource {
                                 sourceId = id,
                                 title = jobTitle,
                                 company = company,
-                                location = "Remote",
+                                // e.g. "Anywhere in the World" vs "USA Only" — the location filter decides if India can apply.
+                                location = region.toString().trim().ifBlank { "Remote" },
                                 url = linkText,
                                 description = description.toString().trim(),
                                 isRemote = true,

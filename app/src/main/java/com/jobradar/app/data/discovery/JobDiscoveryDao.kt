@@ -13,9 +13,6 @@ interface JobDiscoveryDao {
     @Query("SELECT * FROM discovered_jobs ORDER BY COALESCE(postedAtEpochMillis, firstSeenAtEpochMillis) DESC LIMIT 300")
     fun observeAll(): Flow<List<JobDiscoveryEntity>>
 
-    @Query("SELECT id FROM discovered_jobs")
-    suspend fun getAllIds(): List<String>
-
     @Query("SELECT COUNT(*) FROM discovered_jobs")
     suspend fun count(): Int
 
@@ -26,4 +23,14 @@ interface JobDiscoveryDao {
     // (observed from Adzuna) so a bad timestamp can't permanently sit at the top of the sort.
     @Query("UPDATE discovered_jobs SET postedAtEpochMillis = :nowMillis WHERE postedAtEpochMillis > :nowMillis")
     suspend fun clampFuturePostedDates(nowMillis: Long)
+
+    // Saved jobs live in tracked_jobs, so clearing the feed never touches what the user is tracking.
+    @Query("DELETE FROM discovered_jobs WHERE COALESCE(postedAtEpochMillis, firstSeenAtEpochMillis) < :cutoffMillis")
+    suspend fun deleteOlderThan(cutoffMillis: Long): Int
+
+    @Query("SELECT * FROM discovered_jobs")
+    suspend fun getAll(): List<JobDiscoveryEntity>
+
+    @Query("DELETE FROM discovered_jobs WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
 }

@@ -78,7 +78,8 @@ class CompanyAtsSource(private val context: Context) : JobSource {
                 url = item.optString("absolute_url"),
                 description = "",
                 isRemote = location.contains("remote", ignoreCase = true),
-                postedAtEpochMillis = parseIsoDateMillis(item.optString("updated_at")),
+                // updated_at changes on any edit, making months-old postings look new; first_published is the real post date.
+                postedAtEpochMillis = parseIsoDateMillis(item.optString("first_published").ifBlank { item.optString("updated_at") }),
             )
         }
     }
