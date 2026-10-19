@@ -37,6 +37,8 @@ class FilterSettingsStore(context: Context) {
             cities = prefs.getList(KEY_CITIES),
             extraRoles = prefs.getList(KEY_EXTRA_ROLES),
             blockedWords = prefs.getList(KEY_BLOCKED),
+            adzunaAppId = prefs.getString(KEY_ADZUNA_APP_ID, "").orEmpty(),
+            adzunaAppKey = prefs.getString(KEY_ADZUNA_APP_KEY, "").orEmpty(),
         )
     }
 
@@ -51,5 +53,7 @@ class FilterSettingsStore(context: Context) {
         const val KEY_CITIES = "cities"
         const val KEY_EXTRA_ROLES = "extra_roles"
         const val KEY_BLOCKED = "blocked_words"
+        const val KEY_ADZUNA_APP_ID = "adzuna_app_id"
+        const val KEY_ADZUNA_APP_KEY = "adzuna_app_key"
     }
 }

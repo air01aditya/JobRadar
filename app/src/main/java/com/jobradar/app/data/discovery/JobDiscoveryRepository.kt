@@ -30,7 +30,7 @@ class JobDiscoveryRepository(
     // Every 15 minutes: aggregators, plus the hand-checked big recruiters (~33 requests) so
     // their new openings appear before aggregators re-list them.
     private val boardSources: List<JobSource> = listOf(
-        AdzunaSource(appContext), RemotiveSource, RemoteOkSource, WeWorkRemotelySource,
+        AdzunaSource(appContext, settingsStore), RemotiveSource, RemoteOkSource, WeWorkRemotelySource,
         CompanyAtsSource(appContext, "priority-employers") { PriorityEmployers.boards },
     )
 

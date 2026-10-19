@@ -1,15 +1,8 @@
-import java.util.Properties
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
-}
-
-val localProperties = Properties().apply {
-    val file = rootProject.file("local.properties")
-    if (file.exists()) file.inputStream().use { load(it) }
 }
 
 android {
@@ -24,11 +17,6 @@ android {
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        // Adzuna is a free-tier developer API key, not a user credential — kept out of
-        // source control via local.properties (gitignored) and injected at build time.
-        buildConfigField("String", "ADZUNA_APP_ID", "\"${localProperties.getProperty("adzuna.appId", "")}\"")
-        buildConfigField("String", "ADZUNA_APP_KEY", "\"${localProperties.getProperty("adzuna.appKey", "")}\"")
     }
 
     buildTypes {
@@ -48,7 +36,6 @@ android {
 
     buildFeatures {
         compose = true
-        buildConfig = true
     }
 
     packaging {
