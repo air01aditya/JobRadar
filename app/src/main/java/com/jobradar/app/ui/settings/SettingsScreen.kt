@@ -25,6 +25,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +53,8 @@ fun SettingsScreen(
     var citiesText by remember { mutableStateOf(initial.cities.joinToString(", ")) }
     var extraRolesText by remember { mutableStateOf(initial.extraRoles.joinToString(", ")) }
     var blockedText by remember { mutableStateOf(initial.blockedWords.joinToString(", ")) }
+    // Most users never need a key, so keep it folded away unless one is already set.
+    var showAdvanced by remember { mutableStateOf(initial.adzunaAppId.isNotBlank()) }
 
     Column(
         modifier = Modifier
@@ -137,28 +140,32 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
 
-        Section("Adzuna (optional)")
-        Text(
-            text = "Adds more India job listings. Get a free key at developer.adzuna.com and paste it here. " +
-                "Without one, JobRadar still checks the other job boards and company career pages.",
-            style = MaterialTheme.typography.bodySmall,
-            color = JobRadarMutedText,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        OutlinedTextField(
-            value = draft.adzunaAppId,
-            onValueChange = { draft = draft.copy(adzunaAppId = it) },
-            label = { Text("App ID") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        )
-        OutlinedTextField(
-            value = draft.adzunaAppKey,
-            onValueChange = { draft = draft.copy(adzunaAppKey = it) },
-            label = { Text("App key") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        )
+        Section("Advanced")
+        TextButton(onClick = { showAdvanced = !showAdvanced }) {
+            Text(if (showAdvanced) "Hide Adzuna key" else "Add an Adzuna key (optional)")
+        }
+        if (showAdvanced) {
+            Text(
+                text = "Not needed. JobRadar already checks job boards and company career pages. " +
+                    "A free key from developer.adzuna.com adds more India listings.",
+                style = MaterialTheme.typography.bodySmall,
+                color = JobRadarMutedText,
+            )
+            OutlinedTextField(
+                value = draft.adzunaAppId,
+                onValueChange = { draft = draft.copy(adzunaAppId = it) },
+                label = { Text("App ID") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+            OutlinedTextField(
+                value = draft.adzunaAppKey,
+                onValueChange = { draft = draft.copy(adzunaAppKey = it) },
+                label = { Text("App key") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+        }
 
         Spacer(Modifier.height(20.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
