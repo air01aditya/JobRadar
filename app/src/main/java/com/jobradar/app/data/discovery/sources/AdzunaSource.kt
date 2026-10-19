@@ -1,10 +1,10 @@
 package com.jobradar.app.data.discovery.sources
 
 import android.content.Context
-import com.jobradar.app.BuildConfig
 import com.jobradar.app.data.discovery.JobHttpClient
 import com.jobradar.app.data.discovery.RawJob
 import com.jobradar.app.data.discovery.parseIsoDateMillis
+import com.jobradar.app.data.settings.FilterSettingsStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -22,8 +22,9 @@ import java.util.concurrent.TimeUnit
  *
  * Free tier limits: 250 requests/day, 1000/week, 2500/month. queries.size requests per run,
  * at most once per MIN_INTERVAL, keeps us at ~72/day (~2200/month) whatever triggers the run.
+ * The key is the user's own (entered in Settings), so that budget is per install, not shared.
  */
-class AdzunaSource(private val context: Context) : JobSource {
+class AdzunaSource(private val context: Context, private val settingsStore: FilterSettingsStore) : JobSource {
     override val name = NAME
 
     // [titleWords]: all must appear in the title. [anyWords]: at least one must appear anywhere.
@@ -39,8 +40,9 @@ class AdzunaSource(private val context: Context) : JobSource {
     )
 
     override suspend fun fetch(): List<RawJob> = coroutineScope {
-        val appId = BuildConfig.ADZUNA_APP_ID
-        val appKey = BuildConfig.ADZUNA_APP_KEY
+        val settings = settingsStore.current()
+        val appId = settings.adzunaAppId
+        val appKey = settings.adzunaAppKey
         if (appId.isBlank() || appKey.isBlank()) return@coroutineScope emptyList()
         if (!claimRunSlot()) return@coroutineScope emptyList()
 

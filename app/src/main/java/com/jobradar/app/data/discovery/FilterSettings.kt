@@ -9,6 +9,9 @@ data class FilterSettings(
     val cities: List<String> = emptyList(),
     val extraRoles: List<String> = emptyList(),
     val blockedWords: List<String> = emptyList(),
+    // Each user's own free Adzuna key. Blank means Adzuna is skipped; the other sources still run.
+    val adzunaAppId: String = "",
+    val adzunaAppKey: String = "",
 ) {
     companion object {
         val MAX_YEARS_OPTIONS = listOf(0, 1, 2, 3)
