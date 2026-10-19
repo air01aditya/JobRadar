@@ -15,6 +15,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.sync.Mutex
@@ -46,6 +49,11 @@ class JobDiscoveryRepository(
     private val checkLock = Mutex()
 
     private val prefs get() = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    // When the last check finished (0 = never). Phones that kill background work show up
+    // here as a time that stops moving, so the feed can warn about it.
+    private val _lastCheckAt = MutableStateFlow(prefs.getLong(KEY_LAST_CHECK_AT, 0L))
+    val lastCheckAt: StateFlow<Long> = _lastCheckAt.asStateFlow()
 
     /** Saved jobs, narrowed to the user's current settings — re-filters the moment settings change. */
     fun observeJobs(): Flow<List<JobDiscoveryEntity>> =
@@ -147,6 +155,8 @@ class JobDiscoveryRepository(
             "check done: fetched=${fetched.size} unique=${deduped.size} saved=${accepted.size} " +
                 "new=${newJobs.size} matchSettings=${toNotify.size}",
         )
+        prefs.edit().putLong(KEY_LAST_CHECK_AT, now).apply()
+        _lastCheckAt.value = now
 
         // Only the very first check after install stays silent: everything looks "new" then, and
         // those jobs were live before the app existed. An empty feed later (after a cleanup) still notifies.
@@ -179,6 +189,7 @@ class JobDiscoveryRepository(
         const val PREFS = "job_discovery"
         const val KEY_FILTERS_VERSION = "filters_version"
         const val KEY_INITIAL_SYNC_DONE = "initial_sync_done"
+        const val KEY_LAST_CHECK_AT = "last_check_at"
         const val MAX_DESCRIPTION_CHARS = 4000
     }
 }

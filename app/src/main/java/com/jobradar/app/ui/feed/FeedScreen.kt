@@ -2,6 +2,7 @@ package com.jobradar.app.ui.feed
 
 import android.content.Intent
 import android.net.Uri
+import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -34,6 +35,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -41,6 +44,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -48,6 +52,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.unit.dp
 import com.jobradar.app.data.discovery.FilterSettings
 import com.jobradar.app.data.discovery.JobDiscoveryEntity
@@ -84,21 +91,47 @@ fun FeedScreen(
     val state by viewModel.state.collectAsState()
     val pagerState = rememberPagerState(pageCount = { TABS.size })
     val scope = rememberCoroutineScope()
+    val lastCheckAt by viewModel.lastCheckAt.collectAsState()
+    val showBackgroundPrompt by viewModel.showBackgroundPrompt.collectAsState()
+    val context = LocalContext.current
+
+    // Re-check on every return to the feed, e.g. coming back from the phone's app settings.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.recheckBackgroundAccess()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
         ) {
-            Text(
-                text = describeFilters(filterSettings),
-                style = MaterialTheme.typography.labelSmall,
-                color = JobRadarMutedText,
-                modifier = Modifier.weight(1f),
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = describeFilters(filterSettings),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = JobRadarMutedText,
+                )
+                LastChecked(lastCheckAt)
+            }
             IconButton(onClick = onOpenSettings) {
                 Icon(Icons.Default.Tune, contentDescription = "Job filters", tint = JobRadarAccent)
             }
+        }
+
+        if (showBackgroundPrompt) {
+            BackgroundAccessCard(
+                onOpenSettings = {
+                    context.startActivity(
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
+                    )
+                },
+                onDismiss = viewModel::dismissBackgroundPrompt,
+            )
         }
 
         TabRow(
@@ -299,6 +332,45 @@ private fun JobCard(job: JobDiscoveryEntity, isTracked: Boolean, onClick: () -> 
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LastChecked(lastCheckAt: Long) {
+    val stalled = lastCheckAt > 0 && System.currentTimeMillis() - lastCheckAt > STALE_CHECK_MILLIS
+    Text(
+        text = when {
+            lastCheckAt == 0L -> "Not checked yet"
+            stalled -> "Last checked ${relativeTime(lastCheckAt)} · background checks may be blocked"
+            else -> "Last checked ${relativeTime(lastCheckAt)}"
+        },
+        style = MaterialTheme.typography.labelSmall,
+        color = if (stalled) MaterialTheme.colorScheme.error else JobRadarMutedText,
+        modifier = Modifier.padding(top = 2.dp),
+    )
+}
+
+@Composable
+private fun BackgroundAccessCard(onOpenSettings: () -> Unit, onDismiss: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = JobRadarAccent.copy(alpha = 0.10f)),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Let JobRadar check in the background", style = MaterialTheme.typography.titleSmall)
+            Text(
+                text = "Your phone may stop JobRadar when it's closed, and then new-job alerts stop. " +
+                    "In the settings that open, go to Battery and allow background activity.",
+                style = MaterialTheme.typography.bodySmall,
+                color = JobRadarMutedText,
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onDismiss) { Text("Not now") }
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = onOpenSettings) { Text("Open settings") }
             }
         }
     }
