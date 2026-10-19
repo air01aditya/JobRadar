@@ -137,10 +137,34 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
 
+        Section("Adzuna (optional)")
+        Text(
+            text = "Adds more India job listings. Get a free key at developer.adzuna.com and paste it here. " +
+                "Without one, JobRadar still checks the other job boards and company career pages.",
+            style = MaterialTheme.typography.bodySmall,
+            color = JobRadarMutedText,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        OutlinedTextField(
+            value = draft.adzunaAppId,
+            onValueChange = { draft = draft.copy(adzunaAppId = it) },
+            label = { Text("App ID") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        )
+        OutlinedTextField(
+            value = draft.adzunaAppKey,
+            onValueChange = { draft = draft.copy(adzunaAppKey = it) },
+            label = { Text("App key") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        )
+
         Spacer(Modifier.height(20.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             OutlinedButton(onClick = {
-                draft = FilterSettings()
+                // Reset the filters, not the user's Adzuna key.
+                draft = FilterSettings(adzunaAppId = draft.adzunaAppId, adzunaAppKey = draft.adzunaAppKey)
                 citiesText = ""
                 extraRolesText = ""
                 blockedText = ""
